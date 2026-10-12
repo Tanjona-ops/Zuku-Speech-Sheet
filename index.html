@@ -570,7 +570,7 @@ tr:nth-child(even) td{background:rgba(127,127,127,.04)}
             <div class="form-row">
               <div class="field"><label>Reason *</label><select id="cli-motif"><option value="">— select a reason —</option></select></div>
               <!-- Line restricted to Fiber / DTH -->
-              <div class="field"><label>File</label>
+              <div class="field"><label>Line</label>
                 <select id="cli-file">
                   <option value="Fiber">Fiber</option>
                   <option value="DTH">DTH</option>
@@ -645,6 +645,15 @@ tr:nth-child(even) td{background:rgba(127,127,127,.04)}
               <div class="field"><label>⏹ End *</label><input type="datetime-local" id="int-end" oninput="updateIntDuration()"></div>
             </div>
             <div class="dur-wrap" id="int-dur-wrap">Calculated duration: <span class="duration-badge" id="int-dur-badge">—</span></div>
+            <div class="form-row3">
+              <div class="field"><label>Line affected</label><select id="int-line"><option value="Fiber">Fiber</option><option value="DTH">DTH</option><option value="Fiber/DTH">Fiber &amp; DTH</option></select></div>
+              <div class="field"><label>Agents affected</label><input type="number" min="0" id="int-agents" placeholder="e.g. 20"></div>
+              <div class="field"><label>Reporting TL / Sup</label><input type="text" id="int-tl" placeholder="Team leader / supervisor" autocomplete="off"></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label>TAT provided (hrs)</label><input type="number" min="0" step="0.5" id="int-tat" placeholder="e.g. 2"></div>
+              <div class="field"><label>Ticket No.</label><input type="text" id="int-ticket" placeholder="Ticket reference" autocomplete="off"></div>
+            </div>
             <div class="field"><label>Comment (optional)</label><textarea id="int-comment" rows="2" placeholder="Additional information…"></textarea></div>
           </div>
           <div class="int-inc-footer">
@@ -779,11 +788,11 @@ tr:nth-child(even) td{background:rgba(127,127,127,.04)}
             <option value="">All types</option>
             <option value="outil">🔧 Tool</option>
 
-            <option value="connexion">📡 Connexion</option>
+            <option value="connexion">📡 Connection</option>
             <option value="electricite">⚡ Power outage</option>
             <option value="telephonie">🎧 Telephony</option>
             <option value="systeme">🖥️ System/PC</option>
-            <option value="autre">➕ Autre</option>
+            <option value="autre">➕ Other</option>
           </select>
           <button class="btn btn-ghost btn-sm" onclick="resetIntFilters()">↺ Reset</button>
         </div>
@@ -828,7 +837,7 @@ tr:nth-child(even) td{background:rgba(127,127,127,.04)}
           </div>
           <div style="overflow-x:auto">
             <table style="width:100%;border-collapse:collapse">
-              <thead><tr><th>Agent</th><th>Type</th><th>Tool</th><th>Login</th><th>Issue</th><th>Description</th><th>Start</th><th>End</th><th>Duration</th><th>Comment</th></tr></thead>
+              <thead><tr><th>Agent</th><th>Type</th><th>Tool</th><th>Login</th><th>Issue</th><th>Description</th><th>Start</th><th>End</th><th>Duration</th><th>Line</th><th>Agents affected</th><th>Reporting TL</th><th>TAT (hrs) prov. / actual</th><th>Ticket No.</th><th>Comment</th></tr></thead>
               <tbody id="int-inc-all-tbody"></tbody>
             </table>
           </div>
@@ -893,7 +902,7 @@ tr:nth-child(even) td{background:rgba(127,127,127,.04)}
       <div class="editor-card">
         <div class="editor-top">
           <span class="editor-title">Configured tools</span>
-          <span style="font-size:12px;color:var(--text3)" id="tools-count-lbl">0 outils</span>
+          <span style="font-size:12px;color:var(--text3)" id="tools-count-lbl">0 tools</span>
         </div>
         <div class="editor-body"><div class="tools-grid" id="admin-tools-grid"></div></div>
       </div>
@@ -969,30 +978,68 @@ var SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwNmnaH8TD3Bz3A4aZ3YcZ
 // ═══════════════════════════════════════════════════
 //  API — JSONP avec timeout optimisé
 // ═══════════════════════════════════════════════════
-function api(payload){
-  if(!SCRIPT_URL) return Promise.reject(new Error("SCRIPT_URL not configured."));
+var _postBlocked=false;   // set to true if the browser cannot read POST answers → JSONP fallback
+function apiIsRead(p){ var a=(p&&p.action)||''; return a==='getAll'||a.indexOf('get')===0||a==='login'||a==='ping'; }
+
+function apiJsonp(payload){
   return new Promise(function(resolve,reject){
     var cbName='_gs_cb_'+Date.now()+'_'+Math.random().toString(36).slice(2);
     var script;
+    var params=encodeURIComponent(JSON.stringify(payload));
+    var url=SCRIPT_URL+'?callback='+cbName+'&payload='+params;
+    if(url.length>7500){ reject(new Error('This content is too large for the fallback connection. Please try again (or reload the page).')); return; }
     var timeout=setTimeout(function(){
       delete window[cbName];
       if(script&&script.parentNode) script.parentNode.removeChild(script);
       reject(new Error('Timeout'));
-    },15000);
+    },30000);
     window[cbName]=function(data){
       clearTimeout(timeout); delete window[cbName];
       if(script&&script.parentNode) script.parentNode.removeChild(script);
-      if(data&&data.error) reject(new Error(data.error));
+      if(data&&data.error&&data.ok===undefined) reject(new Error(data.error));
       else resolve(data);
     };
-    var params=encodeURIComponent(JSON.stringify(payload));
-    var url=SCRIPT_URL+'?callback='+cbName+'&payload='+params;
     script=document.createElement('script');
     script.src=url;
-    script.onerror=function(){clearTimeout(timeout);delete window[cbName];reject(new Error('Network error'));
-};
+    script.onerror=function(){clearTimeout(timeout);delete window[cbName];reject(new Error('Network error'));};
     document.head.appendChild(script);
   });
+}
+
+async function apiPost(payload){
+  var ctrl=new AbortController();
+  var to=setTimeout(function(){ctrl.abort();},60000);
+  try{
+    var resp=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload),signal:ctrl.signal,redirect:'follow'});
+    if(!resp.ok) throw new Error('Server error (HTTP '+resp.status+')');
+    var text=await resp.text();
+    var data;
+    try{ data=JSON.parse(text); }
+    catch(pe){ throw new Error('Unexpected answer from the server. The Apps Script must be deployed with the latest version (Deploy > Manage deployments > New version).'); }
+    return data;
+  }catch(err){
+    if(err&&err.name==='AbortError') throw new Error('Timeout: the server did not answer within 60 seconds. Please try again.');
+    throw err;
+  }finally{ clearTimeout(to); }
+}
+
+async function api(payload){
+  if(!SCRIPT_URL) throw new Error('SCRIPT_URL not configured.');
+  var data;
+  if(!_postBlocked){
+    try{
+      data=await apiPost(payload);
+    }catch(err){
+      var isNet=(err instanceof TypeError);               // "Failed to fetch" = no readable answer
+      if(isNet&&apiIsRead(payload)){ _postBlocked=true; data=await apiJsonp(payload); }   // reads can be retried safely
+      else if(isNet){ throw new Error('Network error — your change may NOT have been saved. Check your connection, click Sync, then try again.'); }
+      else throw err;
+    }
+  }else{
+    data=await apiJsonp(payload);
+  }
+  if(data&&data.error&&data.ok===undefined) throw new Error(data.error);
+  return data;
 }
 
 // ═══════════════════════════════════════════════════
@@ -1043,16 +1090,32 @@ var _dashLoading=false;
 //  DEFAULT DATA
 // ═══════════════════════════════════════════════════
 var DEFAULT_TOOLS=[
-  {id:'broadhub', name:'BroadHub', desc:'Billing & customer account platform', icon:'💳'},
-  {id:'crm',      name:'CRM',      desc:'Customer relationship / ticketing tool', icon:'🗃️'},
-  {id:'unm2000',  name:'UNM 2000', desc:'FiberHome GPON/ONU management platform', icon:'📡'},
-  {id:'imaster',  name:'I-Master', desc:'Huawei OLT/ONU management platform', icon:'📡'},
-  {id:'payway',   name:'PayWay',   desc:'Payment gateway platform', icon:'💰'}
+  {id:'tool_broadhub',name:'Broadhub',desc:'Application (Downtime Tracker)',icon:'💳'},
+  {id:'tool_crm',name:'CRM',desc:'Application (Downtime Tracker)',icon:'🗃️'},
+  {id:'tool_kayako',name:'Kayako',desc:'Application (Downtime Tracker)',icon:'🎫'},
+  {id:'tool_presence',name:'Presence',desc:'Application (Downtime Tracker)',icon:'👥'},
+  {id:'tool_zimbra',name:'Zimbra',desc:'Application (Downtime Tracker)',icon:'✉️'},
+  {id:'tool_denar',name:'Denar',desc:'Application (Downtime Tracker)',icon:'💰'},
+  {id:'tool_smsportal',name:'SMS portal',desc:'Application (Downtime Tracker)',icon:'📨'},
+  {id:'tool_nms',name:'NMS',desc:'Application (Downtime Tracker)',icon:'🛠️'},
+  {id:'tool_knowledgeportal',name:'Knowledge Portal',desc:'Application (Downtime Tracker)',icon:'🛠️'},
+  {id:'tool_malogs',name:'Malogs',desc:'Application (Downtime Tracker)',icon:'🛠️'},
+  {id:'tool_callcenternumberdown',name:'Call Center Number Down',desc:'Application (Downtime Tracker)',icon:'☎️'},
+  {id:'tool_easydocsis',name:'EasyDocsis',desc:'Application (Downtime Tracker)',icon:'🛠️'},
+  {id:'tool_autosend',name:'Autosend',desc:'Application (Downtime Tracker)',icon:'🛠️'},
+  {id:'tool_unm',name:'UNM',desc:'Application (Downtime Tracker)',icon:'📡'},
+  {id:'tool_imaster',name:'Imaster',desc:'Application (Downtime Tracker)',icon:'📡'},
+  {id:'tool_freshchats',name:'Freshchats',desc:'Application (Downtime Tracker)',icon:'💬'},
+  {id:'tool_smartbill',name:'Smartbill',desc:'Application (Downtime Tracker)',icon:'🧾'},
+  {id:'tool_vicidial',name:'ViciDial',desc:'Application (Downtime Tracker)',icon:'📞'},
+  {id:'tool_qamonitoringtool',name:'QA monitoring tool',desc:'Application (Downtime Tracker)',icon:'🛠️'}
 ];
 var DEFAULT_PROBLEMS=[
-  'Unable to log in','Communication issue','Unable to qualify the call',
-  'Unable to place on hold','Application crashing','Frozen screen',
-  'Slow connection','Access denied','Data not loading','Unexpected disconnection'
+  'Application not accessible','Application slow','Login failure','Agents logged out','Application down',
+  'System maintenance / migration','Calls not routing','Data not loading','Frozen screen','Session timeout',
+  'Blank Channel','Glitching Channel','Missing Channel','Scrambled Channels','Audio/Video out of Sync','Fiber Cut',
+  'Pending Commands','Power Outage','Network Outage','No Audio','Radio Without Audio','TV/Radio Mode','Slow Speeds',
+  'No IP','Maintenance','Internet Outage','Decoders Auto rescanning','No Video','Decoder refresh not working','Decoder not Entitled'
 ];
 var MOTIFS_INC=[
   'Unable to browse wifi interfac','LOS flashing red','Dead Air','Area Outage - Confirmed','Paid',
@@ -1272,7 +1335,7 @@ function renderPage(p){
 async function doLogin(){
   var login=gv('f-login'),pwd=gv('f-pwd'),errEl=ge('login-err');
   errEl.style.display='none';
-  if(!login||!pwd){errEl.textContent='Veuillez renseigner votre identifiant et mot de passe.';errEl.style.display='block';return;}
+  if(!login||!pwd){errEl.textContent='Please enter your username and password.';errEl.style.display='block';return;}
   var btn=ge('btn-login');btn.disabled=true;btn.textContent='Signing in…';
   showLoad('Authenticating…');
   try{
@@ -1284,7 +1347,7 @@ async function doLogin(){
     var ini=CU.nom.split(' ').map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase();
     ge('sb-av').textContent=ini;ge('sb-name').textContent=CU.nom;
     if(CU.role==='admin'){
-      ge('sb-role').textContent='Administrateur';
+      ge('sb-role').textContent='Administrator';
       ge('sb-av').style.background='linear-gradient(135deg,var(--purple),var(--danger))';
       ge('nav-admin').style.display='block';
     }else{
@@ -1308,7 +1371,7 @@ async function doLogin(){
       _dashLoading=false;
       var t=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
 
-      setSyncStatus('ok','Cache '+t+' · '+DB.fiches.length+' fiches');
+      setSyncStatus('ok','Cache '+t+' · '+DB.fiches.length+' sheets');
       updateNavCounts();
       if(CU.role==='admin') goTo('fiches',ge('nav-admin').querySelector('.nav-item[onclick*="fiches"]'));
       else goTo('fiches',ge('nav-agent').querySelector('.nav-item'));
@@ -1341,45 +1404,31 @@ function normalFiche(f){
 // ═══════════════════════════════════════════════════
 //  CHARGEMENT — UN SEUL Promise.all pour tous les appels
 // ═══════════════════════════════════════════════════
+var _lastSync=0, _loadingNow=false;
 async function loadAll(background){
-  // En mode background on ne montre pas le loader
+  if(_loadingNow){ if(background) return; while(_loadingNow) await new Promise(function(r){setTimeout(r,250);}); }
+  _loadingNow=true;
   if(!background) _dashLoading=true;
   if(!background) setSyncStatus('ld','Syncing…');
   try{
-    // PERF: a SINGLE Promise.allSettled block for all 6 parallel calls
-    var results = await Promise.allSettled([
-      api({action:'getFiches'}),
-      api({action:'getIncidents'}),
-      api({action:'getUsers'}),
-      api({action:'getInternalIncidents'}),
-      api({action:'getTools'}),
-      api({action:'getProblems'})
-    ]);
-
-    // Extract each result, handling individual failures
-    var r0=results[0],r1=results[1],r2=results[2],r3=results[3],r4=results[4],r5=results[5];
-
-    DB.fiches              = r0.status==='fulfilled'&&Array.isArray(r0.value)
-                             ? r0.value.map(normalFiche) : DB.fiches;
-    DB.incidents           = r1.status==='fulfilled'&&Array.isArray(r1.value)
-                             ? r1.value : DB.incidents;
-    DB.users               = r2.status==='fulfilled'&&Array.isArray(r2.value)
-                             ? r2.value : DB.users;
-    DB.internalIncidents   = r3.status==='fulfilled'&&Array.isArray(r3.value)
-                             ? r3.value : DB.internalIncidents;
-    var ft                 = r4.status==='fulfilled'&&Array.isArray(r4.value)&&r4.value.length
-                             ? r4.value : null;
-    if(ft) DB.tools = ft; else if(!DB.tools.length) DB.tools = DEFAULT_TOOLS.slice();
-    var fp                 = r5.status==='fulfilled'&&Array.isArray(r5.value)&&r5.value.length
-                             ? r5.value : null;
-    if(fp) DB.problems = fp; else if(!DB.problems.length) DB.problems = DEFAULT_PROBLEMS.slice();
+    var all=await api({action:'getAll'});
+    if(!all||all.ok===false||!Array.isArray(all.fiches)){
+      throw new Error((all&&all.msg&&all.msg.indexOf('Unknown action')===0)
+        ? 'The Apps Script is outdated. Deploy the latest version (Deploy > Manage deployments > pencil > New version > Deploy).'
+        : ((all&&all.msg)||'Invalid answer from the server'));
+    }
+    DB.fiches            = all.fiches.map(normalFiche);
+    DB.incidents         = Array.isArray(all.incidents)?all.incidents:[];
+    DB.users             = Array.isArray(all.users)?all.users:[];
+    DB.internalIncidents = Array.isArray(all.internalIncidents)?all.internalIncidents:[];
+    DB.tools             = (Array.isArray(all.tools)&&all.tools.length)?all.tools:DEFAULT_TOOLS.slice();
+    DB.problems          = (Array.isArray(all.problems)&&all.problems.length)?all.problems:DEFAULT_PROBLEMS.slice();
 
     loadProblemsFromStorage();
     DB.internalIncidents.forEach(function(i){
       if(i.type==='outil'&&i.outilName&&i.problem) registerProblemForTool(i.outilName,i.problem,false);
     });
 
-    // PERF: save to session cache for instant navigation
     saveToSessionCache({
       fiches:DB.fiches, incidents:DB.incidents,
       internalIncidents:DB.internalIncidents,
@@ -1387,37 +1436,34 @@ async function loadAll(background){
     });
 
     _dashLoading=false;
+    _lastSync=Date.now();
     var t=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-
-    setSyncStatus('ok','Sync '+t+' · '+DB.fiches.length+' fiches');
+    setSyncStatus('ok','Synced '+t+' · '+DB.fiches.length+' sheets');
     updateNavCounts();
-
     if(!background) toast('Data synced','ok');
-    else toast('Data updated in the background','ok');
 
-    // Refresh the active page
     var activePage=document.querySelector('.page.active');
-    if(activePage){
-      var pid=activePage.id.replace('page-','');
-      renderPage(pid);
-    }
+    if(activePage){ renderPage(activePage.id.replace('page-','')); }
 
-    // PERF: auto-sync every 5 min (background, non-blocking UI)
     if(window._autoSync) clearInterval(window._autoSync);
     window._autoSync=setInterval(function(){
       if(!CU){clearInterval(window._autoSync);return;}
-      loadAll(true).catch(function(){setSyncStatus('err','Auto-sync error');});
-
+      loadAll(true);
     }, 5*60*1000);
 
   }catch(e){
     _dashLoading=false;
-    setSyncStatus('err','Sync error');
-
-    toast('Sync error: '+e.message,'err');
-
+    setSyncStatus('err','Sync failed');
+    toast('Sync failed: '+e.message,'err');
+  }finally{
+    _loadingNow=false;
   }
 }
+
+// Refresh automatically when the user comes back to the tab (picks up edits made in the Google Sheet)
+document.addEventListener('visibilitychange',function(){
+  if(!document.hidden&&CU&&(Date.now()-_lastSync)>60000&&!document.querySelector('.modal-overlay.open')) loadAll(true);
+});
 
 async function refreshData(){
   clearSessionCache();
@@ -1635,7 +1681,7 @@ function ficheCardHTML(d){
 
         +(d.mg?'<button class="lang-tab'+(lg==='mg'?' active':'')+'" onclick="setLang(event,'+d.id+',\'mg\')">Luganda</button>':'')
 
-        +'</div><div class="disc-lbl">Discours agent</div>'
+        +'</div><div class="disc-lbl">Agent script</div>'
         +'<div class="disc-txt">'+esc(lg==='fr'?d.fr:(d.mg||d.fr))+'</div>';
     }
     body+=renderSections(d.sections);
@@ -1852,14 +1898,14 @@ async function submitClientIncident(){
   var btn=ge('btn-submit-client');
   if(btn){btn.disabled=true;btn.textContent='Sending…';}
   try{
-    var saved=false;
-    try{var res=await api({action:'addIncident',incident:inc});if(res&&res.ok) saved=true;}
-    catch(apiErr){saved=true;}
-    if(saved){
+    var res=await api({action:'addIncident',incident:inc});
+    if(!res||!res.ok){toast((res&&res.msg)||'The incident could not be saved','err');return;}
+    {
       DB.incidents.push(Object.assign({},inc,{id:'local_'+Date.now()}));
       // Invalidate the cache after reporting
       clearSessionCache();
       toast('Client incident reported','ok');
+      setTimeout(function(){loadAll(true);},400);
       ge('cli-msisdn').value='';ge('cli-desc').value='';ge('cli-comment').value='';
       ge('cli-dt').value=nowISO();ge('cli-motif').selectedIndex=0;
       renderMyCliIncidents();updateNavCounts();
@@ -1918,26 +1964,30 @@ async function submitInternalIncident(){
     type:type==='autre'?typeEffectif:type,
     outil:toolId,outilName:toolName,login:login,problem:problem,
     description:desc,start:start,end:end||null,duration:dur,
-    comment:comment,agent:CU?CU.login:'?',agentNom:CU?CU.nom:'?'
+    comment:comment,agent:CU?CU.login:'?',agentNom:CU?CU.nom:'?',
+    line:gv('int-line'),agentsAffected:gv('int-agents'),reportingTL:gv('int-tl'),tatProvided:gv('int-tat'),ticketNo:gv('int-ticket')
   };
   var btn=ge('btn-submit-interne');
   if(btn){btn.disabled=true;btn.textContent='Sending…';}
   try{
-    var saved=false;
-    try{var res=await api({action:'addInternalIncident',incident:inc});if(res&&res.ok) saved=true;}
-    catch(apiErr){console.warn('GAS unavailable — local save');saved=true;}
-    if(saved){
+    var res=await api({action:'addInternalIncident',incident:inc});
+    if(!res||!res.ok){toast((res&&res.msg)||'The incident could not be saved','err');return;}
+    {
       if(type==='outil'&&toolName&&problem) registerProblemForTool(toolName,problem,true);
       DB.internalIncidents.push(Object.assign({},inc,{id:'local_'+Date.now()}));
       // Invalidate the cache after reporting
       clearSessionCache();
       toast('Internal incident reported','ok');
+      setTimeout(function(){loadAll(true);},400);
       if(ge('int-outil'))      ge('int-outil').value='';
       if(ge('int-login'))      ge('int-login').value='';
       if(ge('int-problem'))    ge('int-problem').value='';
       if(ge('int-desc'))       ge('int-desc').value='';
       if(ge('int-comment'))    ge('int-comment').value='';
       if(ge('int-type-autre')) ge('int-type-autre').value='';
+      if(ge('int-agents')) ge('int-agents').value='';
+      if(ge('int-tat'))    ge('int-tat').value='';
+      if(ge('int-ticket')) ge('int-ticket').value='';
       var now=nowISO();
       if(ge('int-start')) ge('int-start').value=now;
       if(ge('int-end'))   ge('int-end').value=isoPlus1min(now);
@@ -2144,7 +2194,7 @@ function renderIncDash(){
     var byType={};
     intIncs.forEach(function(i){
       var tk=String(i.type||'').toLowerCase();
-      var typInfo=INT_INC_TYPES[tk]||{label:i.type||'Autre',icon:'❓',color:'var(--text2)'};
+      var typInfo=INT_INC_TYPES[tk]||{label:i.type||'Other',icon:'❓',color:'var(--text2)'};
       var key=typInfo.icon+' '+typInfo.label;
       if(!byType[key]) byType[key]={label:key,count:0,totalMins:0,color:typInfo.color};
       byType[key].count++;
@@ -2210,9 +2260,14 @@ function renderIncDash(){
         +'<td style="font-size:11px;color:var(--text3);white-space:nowrap">'+fmtDT(i.start)+'</td>'
         +'<td style="font-size:11px;color:var(--text3);white-space:nowrap">'+fmtDT(i.end)+'</td>'
         +'<td><span class="duration-badge'+(i.end?'':' running')+'">'+esc(durStr)+'</span></td>'
+        +'<td style="font-size:12px">'+esc(i.line||'—')+'</td>'
+        +'<td style="font-size:12px;text-align:center">'+esc(i.agentsAffected||'—')+'</td>'
+        +'<td style="font-size:12px">'+esc(i.reportingTL||'—')+'</td>'
+        +'<td style="font-size:12px;font-family:\'DM Mono\',monospace;white-space:nowrap">'+esc((i.tatProvided||'—')+' / '+(i.actualTat||'—'))+'</td>'
+        +'<td style="font-size:12px">'+esc(i.ticketNo||'—')+'</td>'
         +'<td style="font-size:12px;color:var(--text3)">'+esc(i.comment||'—')+'</td>'
         +'</tr>';
-    }).join(''):'<tr><td colspan="10" class="empty-row">No internal incident in this period</td></tr>';
+    }).join(''):'<tr><td colspan="15" class="empty-row">No internal incident in this period</td></tr>';
 
   }
 
@@ -2250,7 +2305,7 @@ function renderIncDash(){
   var alertEl=ge('dash-alerts');if(alertEl) alertEl.innerHTML=alerts;
 
   var sub=ge('incdash-sub');
-  if(sub) sub.textContent=cliIncs.length+' incident'+(cliIncs.length!==1?'s':'')+' client'+(cliIncs.length!==1?'s':'')+' · '+intIncs.length+' interne'+(intIncs.length!==1?'s':'');
+  if(sub) sub.textContent=cliIncs.length+' client incident'+(cliIncs.length!==1?'s':'')+' · '+intIncs.length+' internal incident'+(intIncs.length!==1?'s':'');
   updateNavCounts();
 }
 
@@ -2270,7 +2325,7 @@ function exportIncCSV(type){
     incs=DB.internalIncidents;
     if(!incs.length){toast('No internal incident to export','wn');return;}
 
-    h='Agent,Type,Tool,Login,Issue,Description,Start,End,Duration,Comment';
+    h='Agent,Type,Tool,Login,Issue,Description,Start,End,Duration,Line,Agents affected,Reporting TL,TAT provided (hrs),Actual TAT (hrs),Ticket No.,OPCO,Comment';
 
     rows=incs.map(function(i){
       var durMin=calcDurationMin(i.start,i.end||null);
@@ -2278,6 +2333,7 @@ function exportIncCSV(type){
         i.agentNom||i.agent,i.type,i.outilName||i.outil||'',i.login||'',
         (i.problem||'').replace(/,/g,' '),(i.description||'').replace(/,/g,' '),
         fmtDT(i.start),fmtDT(i.end),i.end?fmtMinDuration(durMin):'Ongoing',
+        i.line||'',i.agentsAffected||'',(i.reportingTL||'').replace(/,/g,' '),i.tatProvided||'',i.actualTat||'',(i.ticketNo||'').replace(/,/g,' '),i.opco||'',
         (i.comment||'').replace(/,/g,' ')
       ].join(',');
     });
@@ -2371,7 +2427,7 @@ function renderFicheEditorBody(){
     +'<option value="">— select —</option>'+catOpts+'<option value="__new__">+ New category…</option>'
     +'</select></div>'
     +'<div class="field"><label>Title *</label><input type="text" id="etit" value="'+esc(d.title||'')+'" placeholder="Title…" oninput="_editFicheData.title=this.value"></div></div>'
-    +'<div class="field" style="margin-bottom:10px"><label>Code USSD (optionnel)</label>'
+    +'<div class="field" style="margin-bottom:10px"><label>USSD code (optional)</label>'
     +'<input type="text" id="eussd" value="'+esc(d.ussd||'')+'" placeholder="#111*…" oninput="_editFicheData.ussd=this.value"></div>'
     +'<div class="form-row" style="margin-bottom:10px">'
     +'<div class="field"><label>English speech</label><textarea id="efr" oninput="_editFicheData.fr=this.value">'+esc(d.fr||'')+'</textarea></div>'
@@ -2424,8 +2480,8 @@ function renderSecEditor(s,idx,total){
   var mfi=function(sf,v,ph){return'<input class="mfi" value="'+esc(v)+'" placeholder="'+(ph||'')+'" oninput="secFieldInput('+idx+',\''+sf+'\',this.value)">';};
   var mfta=function(sf,v,ph){return'<textarea class="mfta" placeholder="'+(ph||'')+'" oninput="secFieldInput('+idx+',\''+sf+'\',this.value)">'+esc(v)+'</textarea>';};
   var f='';
-  if(s.type==='text'||s.type==='warning'){f='<label class="mlbl">Contenu</label>'+mfta('content',s.content||'');}
-  else if(s.type==='ussd_tree'){f='<label class="mlbl">Arborescence</label><textarea class="mfta" style="min-height:80px;font-family:\'DM Mono\',monospace;font-size:11px" oninput="secFieldInput('+idx+',\'content\',this.value)">'+esc(s.content||'')+'</textarea>';}
+  if(s.type==='text'||s.type==='warning'){f='<label class="mlbl">Content</label>'+mfta('content',s.content||'');}
+  else if(s.type==='ussd_tree'){f='<label class="mlbl">Menu tree</label><textarea class="mfta" style="min-height:80px;font-family:\'DM Mono\',monospace;font-size:11px" oninput="secFieldInput('+idx+',\'content\',this.value)">'+esc(s.content||'')+'</textarea>';}
   else if(s.type==='conditions'){
     f='<div class="form-row">'
       +'<div class="mcard"><label class="mlbl" style="color:rgba(45,157,204,.8)">YES — Title</label>'+mfi('yes.head',s.yes&&s.yes.head||'')+'<label class="mlbl" style="margin-top:5px">Text</label>'+mfta('yes.body',s.yes&&s.yes.body||'')+'</div>'
@@ -2471,28 +2527,37 @@ function renderSecEditor(s,idx,total){
     +'<div class="sec-item-btns" style="display:flex;gap:4px;align-items:center">'+upBtn+dnBtn
     +'<button class="btn btn-danger btn-sm" onclick="removeSection('+idx+')">Delete</button></div></div>'
 
-    +'<label class="mlbl" style="margin-bottom:4px">Titre (optionnel)</label>'
+    +'<label class="mlbl" style="margin-bottom:4px">Title (optional)</label>'
     +'<input class="mfi" style="margin-bottom:8px;width:100%" value="'+esc(s.title||'')+'" oninput="secFieldInput('+idx+',\'title\',this.value)">'
     +'<div class="type-bar">'+tb+'</div>'+f+'</div>';
 }
 
+function syncEditorFieldsFromDOM(){
+  // read what is really typed in the form (safety net in addition to the oninput handlers)
+  var m={etit:'title',eussd:'ussd',efr:'fr',emg:'mg',ehist:'hist'};
+  Object.keys(m).forEach(function(id){ var el=ge(id); if(el&&_editFicheData) _editFicheData[m[id]]=el.value; });
+  var cat=ge('ecat'); if(cat&&cat.value&&cat.value!=='__new__'&&_editFicheData) _editFicheData.cat=cat.value;
+}
 async function saveFiche(){
+  syncEditorFieldsFromDOM();
   var d=_editFicheData;
   if(!d.cat||!d.title){toast('Category and title are required','err');return;}
 
   var btn=ge('btn-save-fiche');if(btn){btn.disabled=true;btn.textContent='Saving…';}
-
   try{
-    var res=await api({action:'saveFiche',fiche:d,isNew:_editFicheId===null,who:CU?CU.login:''});
-    if(!res||!res.ok){toast((res&&res.msg)||"Error while saving",'err');return;}
+    var isNew=(_editFicheId===null);
+    var res=await api({action:'saveFiche',fiche:d,isNew:isNew,who:CU?CU.login:''});
+    if(!res||!res.ok){toast((res&&res.msg)||'Error while saving','err');return;}
 
-    if(_editFicheId===null){DB.fiches.push(Object.assign({},d,{id:String(res.id)}));toast('Speech sheet created!','ok');}
-    else{var idx=DB.fiches.findIndex(function(f){return String(f.id)===String(_editFicheId);});if(idx>=0) DB.fiches[idx]=Object.assign({},d,{id:_editFicheId});toast('Speech sheet updated!','ok');}
+    var saved=res.fiche?normalFiche(res.fiche):Object.assign({},d,{id:String(res.id||_editFicheId)});
+    var idx=DB.fiches.findIndex(function(f){return String(f.id)===String(saved.id);});
+    if(idx>=0) DB.fiches[idx]=saved; else DB.fiches.push(saved);
+    toast(isNew?'Speech sheet created!':'Speech sheet updated!','ok');
     clearSessionCache();
     closeModal('modal-fiche-editor');renderAdminFiches();updateNavCounts();
-  }catch(e){toast('Error: '+e.message,'err');}
+    setTimeout(function(){loadAll(true);},400);   // re-read from the Google Sheet to confirm what is stored
+  }catch(e){toast('Save failed: '+e.message,'err');}
   finally{if(btn){btn.disabled=false;btn.textContent='Save';}}
-
 }
 
 // ═══════════════════════════════════════════════════
@@ -2590,8 +2655,9 @@ async function addTool(){
 
   var id='tool_'+Date.now();var tool={id:id,name:name,desc:desc,icon:icon||'🔧'};
   try{
-    try{var res=await api({action:'saveTool',tool:tool,who:CU?CU.login:''});if(res&&res.ok) tool.id=res.id||id;}
-    catch(apiErr){console.warn('GAS saveTool unavailable');}
+    var res=await api({action:'saveTool',tool:tool,who:CU?CU.login:''});
+    if(!res||!res.ok){toast((res&&res.msg)||'Could not add the tool','err');return;}
+    tool.id=res.id||id;
     DB.tools.push(tool);
     clearSessionCache();
     toast('Tool "'+name+'" added','ok');closeModal('modal-add-tool');renderAdminTools();
@@ -2602,7 +2668,8 @@ async function deleteTool(toolId){
   if(!confirm('Delete this tool?')) return;
 
   try{
-    try{await api({action:'deleteTool',id:toolId,who:CU?CU.login:''});}catch(apiErr){console.warn('GAS deleteTool unavailable');}
+    var res=await api({action:'deleteTool',id:toolId,who:CU?CU.login:''});
+    if(!res||!res.ok){toast((res&&res.msg)||'Could not delete the tool','err');return;}
     DB.tools=DB.tools.filter(function(t){return String(t.id)!==String(toolId);});
     clearSessionCache();
     toast('Tool deleted','ok');renderAdminTools();
@@ -2612,7 +2679,8 @@ async function deleteTool(toolId){
 function openAddProblem(){var v=prompt('New possible issue:');if(!v||!v.trim()) return;addProblem(v.trim());}
 async function addProblem(prob){
   try{
-    try{await api({action:'saveProblem',problem:prob,who:CU?CU.login:''});}catch(apiErr){console.warn('GAS saveProblem unavailable');}
+    var res=await api({action:'saveProblem',problem:prob,who:CU?CU.login:''});
+    if(!res||!res.ok){toast((res&&res.msg)||'Could not add the issue','err');return;}
     if(!DB.problems.includes(prob)) DB.problems.push(prob);
     clearSessionCache();
     toast('Issue added','ok');renderAdminTools();
@@ -2623,7 +2691,8 @@ async function deleteProb(prob){
   if(!confirm('Delete "'+prob+'"?')) return;
 
   try{
-    try{await api({action:'deleteProblem',problem:prob,who:CU?CU.login:''});}catch(apiErr){console.warn('GAS deleteProblem unavailable');}
+    var res=await api({action:'deleteProblem',problem:prob,who:CU?CU.login:''});
+    if(!res||!res.ok){toast((res&&res.msg)||'Could not delete the issue','err');return;}
     DB.problems=DB.problems.filter(function(p){return p!==prob;});
     clearSessionCache();
     toast('Issue deleted','ok');renderAdminTools();
