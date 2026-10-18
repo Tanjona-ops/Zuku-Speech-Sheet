@@ -191,7 +191,9 @@ tr:nth-child(even) td{background:rgba(127,127,127,.04)}
 .pr1 .pr-h{color:var(--warn)}.pr2 .pr-h{color:var(--danger)}.pr3 .pr-h{color:#ff3030}
 .pr-txt{font-size:12px;color:var(--text2);line-height:1.65;white-space:pre-wrap}
 .ussd-blk{font-family:'DM Mono',monospace;font-size:12px;color:#7EC8E3;background:rgba(100,160,230,.05);border:1px solid rgba(100,160,230,.18);border-left:2px solid rgba(100,160,230,.5);border-radius:8px;padding:11px 14px;white-space:pre-wrap;line-height:1.9}
-.bonus-row{display:flex;gap:7px}
+.bonus-row{display:flex;flex-wrap:wrap;gap:7px}
+.bonus-row .bonus-chip{flex:1 1 170px;min-width:0}
+.bonus-val{overflow-wrap:anywhere}
 .bonus-chip{flex:1;background:rgba(45,157,204,.06);border:1px solid rgba(45,157,204,.18);border-radius:8px;padding:10px 12px;text-align:center}
 .bonus-val{font-size:20px;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace}
 .bonus-lbl{font-size:11px;color:var(--text2);margin-top:3px}
@@ -210,6 +212,35 @@ tr:nth-child(even) td{background:rgba(127,127,127,.04)}
 .hist-ico{font-size:12px;color:var(--accent);flex-shrink:0;margin-top:1px}
 .hist-txt{font-size:12px;color:var(--text2);line-height:1.55}
 .hist-txt strong{color:var(--accent)}
+
+
+/* ══ REPLY LIBRARY (macros, statuses, yellow fields) ══ */
+.yf{background:#FEC32D;color:#1a1a1a;padding:0 3px;border-radius:3px;font-weight:600}
+.st-open{--stc:#ff4d6d;--stb:rgba(255,77,109,.10)}
+.st-pending{--stc:#2D9DCC;--stb:rgba(45,157,204,.10)}
+.st-onhold{--stc:#a78bfa;--stb:rgba(167,139,250,.12)}
+.st-solved{--stc:#73AE14;--stb:rgba(115,174,20,.12)}
+.st-other{--stc:#8893a3;--stb:rgba(136,147,163,.12)}
+.st-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.st-chip{border:1px solid var(--stc);background:var(--stb);border-radius:10px;padding:10px 12px}
+.st-name{font-weight:700;font-size:13px;color:var(--stc)}
+.st-desc{font-size:12px;color:var(--text2);margin-top:3px;line-height:1.5}
+.mc-status{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 10px;border-radius:20px;color:var(--stc);background:var(--stb);border:1px solid var(--stc)}
+.mc-status::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--stc)}
+.macro{border:1px solid var(--border);border-left:3px solid var(--stc,var(--accent));background:var(--surface);border-radius:10px;padding:12px 14px;margin-top:10px}
+.mc-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.mc-title{font-size:13px;font-weight:700;color:var(--text)}
+.mc-row{display:flex;gap:8px;align-items:flex-start;margin:6px 0;font-size:12px;line-height:1.55}
+.mc-lbl{flex-shrink:0;font-weight:700;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.05em;min-width:118px}
+.mc-txt{color:var(--text2)}
+.mc-check{background:rgba(254,195,45,.08);border:1px solid rgba(254,195,45,.25);border-radius:8px;padding:7px 10px}
+.mc-reply{margin-top:9px}
+.mc-rlbl{font-size:11px;font-weight:700;color:var(--accent);margin-bottom:4px}
+.mc-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:11px 13px;font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap;user-select:text;-webkit-user-select:text;cursor:text;word-break:break-word}
+.grp-head{margin:22px 0 4px;padding:10px 14px;border-radius:10px;background:linear-gradient(90deg,rgba(45,157,204,.16),rgba(115,174,20,.10));border-left:4px solid var(--accent)}
+.grp-title{font-size:14px;font-weight:700;color:var(--text)}
+.grp-note{font-size:12px;color:var(--text2);margin-top:3px;line-height:1.55}
+@media(max-width:540px){.mc-row{flex-direction:column;gap:2px}.mc-lbl{min-width:0}}
 
 /* ══ INCIDENTS TABS ══ */
 .inc-tab-bar{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:24px}
@@ -1158,7 +1189,8 @@ var INT_INC_TYPES={
 var STYPES={
   text:'Free text',conditions:'Yes/No Conditions',items:'Bullet list',
   relance:'3-case follow-up',penalites:'3-tier escalation',ussd_tree:'USSD / Menu Tree',
-  bonus:'Bonus items',table:'Table',warning:'Warning',banks:'Payment channels'
+  bonus:'Bonus items',table:'Table',warning:'Warning',banks:'Payment channels',
+  macro:'Reply macro',statuses:'Status legend',group:'Group heading'
 };
 function mkSec(t){
   if(t==='text')       return{type:t,title:'',content:''};
@@ -1171,6 +1203,9 @@ function mkSec(t){
   if(t==='table')      return{type:t,title:'',cols:['Column 1','Column 2'],rows:[['']]};
   if(t==='warning')    return{type:t,title:'',content:''};
   if(t==='banks')      return{type:t,title:'',cols:[{head:'Payment Channel',items:['']}]};
+  if(t==='macro')      return{type:t,title:'',status:'Pending',when:'',check:'',replies:[{label:'',text:''}]};
+  if(t==='statuses')   return{type:t,title:'',items:[{val:'Open',lbl:'agent working'},{val:'Pending',lbl:'waiting for customer'},{val:'On-hold',lbl:'waiting for technical / billing'},{val:'Solved',lbl:'closed'}]};
+  if(t==='group')      return{type:t,title:'',content:''};
   return{type:t,title:'',content:''};
 }
 
@@ -1182,6 +1217,20 @@ function sv(id,v){var el=document.getElementById(id);if(el) el.value=v;}
 function stc(id,v){var el=document.getElementById(id);if(el) el.textContent=v;}
 function ge(id){return document.getElementById(id);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// escape + highlight every [yellow field] so it is easy to find after pasting into Zendesk
+function hl(s){return esc(s).replace(/\[([^\[\]\n]{1,80})\]/g,'<span class="yf">[$1]</span>');}
+function stCls(n){n=String(n||'').toLowerCase().replace(/[^a-z]/g,'');return ({open:'st-open',pending:'st-pending',onhold:'st-onhold',solved:'st-solved'})[n]||'st-other';}
+function macroHTML(s){
+  var c=stCls(s.status);
+  var o='<div class="macro '+(s.status?c:'')+'"><div class="mc-head"><span class="mc-title">'+esc(s.title||'')+'</span>'
+    +(s.status?'<span class="mc-status '+c+'">'+esc(s.status)+'</span>':'')+'</div>';
+  if(s.when) o+='<div class="mc-row"><span class="mc-lbl">🎯 When to use</span><span class="mc-txt">'+hl(s.when)+'</span></div>';
+  if(s.check) o+='<div class="mc-row mc-check"><span class="mc-lbl">⚠️ Check first</span><span class="mc-txt">'+hl(s.check)+'</span></div>';
+  (s.replies||[]).forEach(function(r){
+    o+='<div class="mc-reply">'+(r.label?'<div class="mc-rlbl">'+esc(r.label)+'</div>':'')+'<div class="mc-box">'+hl(r.text)+'</div></div>';
+  });
+  return o+'</div>';
+}
 function cats(){return['All'].concat([...new Set(DB.fiches.map(function(d){return d.cat;}))]);}
 function filteredFiches(){
   var q=(gv('fiches-search')||'').toLowerCase().trim();
@@ -1623,25 +1672,28 @@ function renderSections(secs){
     var hd=s.title?'<div class="sec-lbl">'+esc(s.title)+'</div>':'';
     var w=function(inner){return'<div class="sec-block">'+hd+inner+'</div>';};
     switch(s.type){
-      case 'text':     return w('<div class="disc-txt">'+esc(s.content)+'</div>');
+      case 'text':     return w('<div class="disc-txt">'+hl(s.content)+'</div>');
       case 'ussd_tree':return w('<div class="ussd-blk">'+esc(s.content)+'</div>');
-      case 'warning':  return w('<div class="warn-blk">'+esc(s.content)+'</div>');
+      case 'warning':  return w('<div class="warn-blk">'+hl(s.content)+'</div>');
+      case 'group':    return '<div class="grp-head"><div class="grp-title">'+esc(s.title||'')+'</div>'+(s.content?'<div class="grp-note">'+hl(s.content)+'</div>':'')+'</div>';
+      case 'macro':    return macroHTML(s);
+      case 'statuses': return w('<div class="st-row">'+(s.items||[]).map(function(b){return'<div class="st-chip '+stCls(b.val)+'"><div class="st-name">'+esc(b.val)+'</div><div class="st-desc">'+hl(b.lbl)+'</div></div>';}).join('')+'</div>');
       case 'conditions':
         return w('<div class="cond-grid">'
-          +'<div class="cond-yes"><div class="cond-head-y">'+esc(s.yes.head)+'</div><div class="cond-body">'+esc(s.yes.body)+'</div></div>'
-          +'<div class="cond-no"><div class="cond-head-n">'+esc(s.no.head)+'</div><div class="cond-body">'+esc(s.no.body)+'</div></div>'
+          +'<div class="cond-yes"><div class="cond-head-y">'+esc(s.yes.head)+'</div><div class="cond-body">'+hl(s.yes.body)+'</div></div>'
+          +'<div class="cond-no"><div class="cond-head-n">'+esc(s.no.head)+'</div><div class="cond-body">'+hl(s.no.body)+'</div></div>'
           +'</div>');
       case 'items':
         return w('<div class="items-block">'+(s.items||[]).map(function(i){
-          return'<div class="item-row"><span class="item-dot"></span><span class="item-txt">'+esc(i)+'</span></div>';
+          return'<div class="item-row"><span class="item-dot"></span><span class="item-txt">'+hl(i)+'</span></div>';
         }).join('')+'</div>');
       case 'relance':
         return w('<div class="relance-grid">'+(s.cases||[]).map(function(c){
-          return'<div class="rel-card"><div class="rel-head">'+esc(c.head)+'</div><div class="rel-txt">'+esc(c.body)+'</div></div>';
+          return'<div class="rel-card"><div class="rel-head">'+esc(c.head)+'</div><div class="rel-txt">'+hl(c.body)+'</div></div>';
         }).join('')+'</div>');
       case 'penalites':
         return w('<div class="pr-grid">'+(s.pr||[]).map(function(p,i){
-          return'<div class="pr'+(i+1)+'"><div class="pr-h">'+esc(p.head)+'</div><div class="pr-txt">'+esc(p.body)+'</div></div>';
+          return'<div class="pr'+(i+1)+'"><div class="pr-h">'+esc(p.head)+'</div><div class="pr-txt">'+hl(p.body)+'</div></div>';
         }).join('')+'</div>');
       case 'bonus':
         return w('<div class="bonus-row">'+(s.items||[]).map(function(b){
@@ -1682,7 +1734,7 @@ function ficheCardHTML(d){
         +(d.mg?'<button class="lang-tab'+(lg==='mg'?' active':'')+'" onclick="setLang(event,'+d.id+',\'mg\')">Luganda</button>':'')
 
         +'</div><div class="disc-lbl">Agent script</div>'
-        +'<div class="disc-txt">'+esc(lg==='fr'?d.fr:(d.mg||d.fr))+'</div>';
+        +'<div class="disc-txt">'+hl(lg==='fr'?d.fr:(d.mg||d.fr))+'</div>';
     }
     body+=renderSections(d.sections);
     if(d.hist) body+='<div class="hist-row"><span class="hist-ico">📋</span><span class="hist-txt"><strong>CRM / Broadhub note:</strong> '+esc(d.hist)+'</span></div>';
@@ -2470,6 +2522,8 @@ function secAddBonus(sid){_editFicheData.sections[sid].items.push({val:'',lbl:''
 function secRmBonus(sid,i){_editFicheData.sections[sid].items.splice(i,1);renderFicheEditorBody();}
 function secAddRow(sid){var s=_editFicheData.sections[sid];s.rows.push(Array((s.cols||[]).length||2).fill(''));renderFicheEditorBody();}
 function secRmRow(sid,i){_editFicheData.sections[sid].rows.splice(i,1);renderFicheEditorBody();}
+function secAddReply(sid){_editFicheData.sections[sid].replies=_editFicheData.sections[sid].replies||[];_editFicheData.sections[sid].replies.push({label:'',text:''});renderFicheEditorBody();}
+function secRmReply(sid,i){_editFicheData.sections[sid].replies.splice(i,1);renderFicheEditorBody();}
 function secAddBankItem(sid,ci){_editFicheData.sections[sid].cols[ci].items.push('');renderFicheEditorBody();}
 function secRmBankItem(sid,ci,ii){_editFicheData.sections[sid].cols[ci].items.splice(ii,1);renderFicheEditorBody();}
 
@@ -2480,7 +2534,7 @@ function renderSecEditor(s,idx,total){
   var mfi=function(sf,v,ph){return'<input class="mfi" value="'+esc(v)+'" placeholder="'+(ph||'')+'" oninput="secFieldInput('+idx+',\''+sf+'\',this.value)">';};
   var mfta=function(sf,v,ph){return'<textarea class="mfta" placeholder="'+(ph||'')+'" oninput="secFieldInput('+idx+',\''+sf+'\',this.value)">'+esc(v)+'</textarea>';};
   var f='';
-  if(s.type==='text'||s.type==='warning'){f='<label class="mlbl">Content</label>'+mfta('content',s.content||'');}
+  if(s.type==='text'||s.type==='warning'||s.type==='group'){f='<label class="mlbl">Content</label>'+mfta('content',s.content||'');}
   else if(s.type==='ussd_tree'){f='<label class="mlbl">Menu tree</label><textarea class="mfta" style="min-height:80px;font-family:\'DM Mono\',monospace;font-size:11px" oninput="secFieldInput('+idx+',\'content\',this.value)">'+esc(s.content||'')+'</textarea>';}
   else if(s.type==='conditions'){
     f='<div class="form-row">'
@@ -2501,7 +2555,7 @@ function renderSecEditor(s,idx,total){
     f='<div class="form-row3">'+(s.pr||[]).map(function(p,i){
       return'<div class="mcard"><label class="mlbl">'+esc(p.head)+'</label><input class="mfi" style="margin-bottom:4px" value="'+esc(p.head||'')+'" oninput="secFieldInput('+idx+',\'pr.'+i+'.head\',this.value)"><textarea class="mfta" oninput="secFieldInput('+idx+',\'pr.'+i+'.body\',this.value)">'+esc(p.body||'')+'</textarea></div>';
     }).join('')+'</div>';
-  }else if(s.type==='bonus'){
+  }else if(s.type==='bonus'||s.type==='statuses'){
     f='<div>'+(s.items||[]).map(function(b,i){
       return'<div class="item-edit-row"><input class="mfi" style="width:75px;flex:none" value="'+esc(b.val||'')+'" placeholder="val" oninput="secIFieldInput('+idx+',\'bval\',\''+i+'\',this.value)"><input class="mfi" value="'+esc(b.lbl||'')+'" placeholder="label" oninput="secIFieldInput('+idx+',\'blbl\',\''+i+'\',this.value)"><button class="btn-rm" onclick="secRmBonus('+idx+','+i+')">✕</button></div>';
     }).join('')+'<button class="btn-add-item" onclick="secAddBonus('+idx+')">+ Add</button></div>';
@@ -2513,6 +2567,19 @@ function renderSecEditor(s,idx,total){
         +'<button class="btn-add-item" onclick="secAddBankItem('+idx+','+ci+')">+ Item</button></div>';
 
     }).join('')+'</div>';
+  }else if(s.type==='macro'){
+    var stOpts=['','Open','Pending','On-hold','Solved'].map(function(o){return'<option value="'+o+'"'+((s.status||'')===o?' selected':'')+'>'+(o||'— none —')+'</option>';}).join('');
+    f='<label class="mlbl">Ticket status to set</label><select class="mfi" onchange="secFieldInput('+idx+',\'status\',this.value)">'+stOpts+'</select>'
+      +'<label class="mlbl" style="margin-top:6px">When to use</label>'+mfta('when',s.when||'')
+      +'<label class="mlbl" style="margin-top:6px">Check first (optional)</label>'+mfta('check',s.check||'')
+      +(s.replies||[]).map(function(r,i){
+        return'<div class="mcard" style="margin-top:6px"><label class="mlbl">Reply '+(i+1)+' — label (leave empty when there is a single reply)</label>'
+          +'<input class="mfi" value="'+esc(r.label||'')+'" oninput="secFieldInput('+idx+',\'replies.'+i+'.label\',this.value)">'
+          +'<label class="mlbl" style="margin-top:5px">Text — write [Yellow field] between square brackets</label>'
+          +'<textarea class="mfta" style="min-height:90px" oninput="secFieldInput('+idx+',\'replies.'+i+'.text\',this.value)">'+esc(r.text||'')+'</textarea>'
+          +'<button class="btn-rm" style="margin-top:4px" onclick="secRmReply('+idx+','+i+')">✕ Remove this reply</button></div>';
+      }).join('')
+      +'<button class="btn-add-item" onclick="secAddReply('+idx+')">+ Add a reply</button>';
   }else if(s.type==='table'){
     var ch=(s.cols||[]).map(function(c,ci){return'<input class="mfi" style="flex:1" value="'+esc(c)+'" oninput="secFieldInput('+idx+',\'cols.'+ci+'\',this.value)">';}).join('');
     var rw=(s.rows||[]).map(function(row,ri){
